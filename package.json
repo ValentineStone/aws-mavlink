@@ -1,0 +1,16 @@
+{
+  "name": "aws-mavlink",
+  "version": "0.2.0",
+  "description": "",
+  "main": "index.js",
+  "author": "Leonid Romanovsky <sirLeonidRomanovsky@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "aws-mqtt": "^1.0.0",
+    "aws-sdk": "^2.783.0",
+    "jspack": "^0.0.4",
+    "lodash": "^4.17.20",
+    "serialport": "^9.0.2",
+    "ws": "^7.3.1"
+  }
+}

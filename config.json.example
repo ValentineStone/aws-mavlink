@@ -1,0 +1,11 @@
+{
+  "topicToThing": "/MAVLINK_TOPIC/TO_THING",
+  "topicFromThing": "/MAVLINK_TOPIC/FROM_THING",
+  "endpoint": "AWS_IOT_ENDPOINT",
+  "sysid": 1,
+  "serial": {
+    "path": "/dev/serial/by-id/SERIAL_DEVICE",
+    "baudRate": 57600
+  },
+  "pongThrottle": 1000
+}
