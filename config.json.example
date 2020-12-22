@@ -8,6 +8,7 @@
     "baudRate": 57600
   },
   "pongThrottle": 1000,
+  "restartDelay": 1000,
   "udp": {
     "server": {},
     "gcs": {

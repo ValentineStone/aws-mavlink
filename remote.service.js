@@ -8,7 +8,6 @@ const { MAVLink20Processor, mavlink20 } = require('./MAVLink20')
 // Load configs
 
 const config = require('./config.json')
-const { resolve } = require('path')
 
 AWS.config.loadFromPath(path.join(__dirname, 'aws.keys.json'))
 
@@ -28,35 +27,38 @@ const mqttclient = new AWSMqttClient({
 })
 
 const serialport = new SerialPort(
-  config.serial.path,
-  {
-    baudRate: config.serial.baudRate,
-    autoOpen: false
-  },
-  exitOnError
-)
+  config.serial.path, {
+  baudRate: config.serial.baudRate,
+  autoOpen: false
+})
 
 const mav2 = new MAVLink20Processor()
 
 const run = async () => {
+  serialport.removeAllListeners()
+  mqttclient.removeAllListeners()
+  
+  console.log('Connecting...')
 
   // Connect all together
 
-  const mqtt_connected_and_subscribed = new Promise((resolve, reject) =>
+  await new Promise((resolve, reject) => {
+    serialport.on('error', reject)
+    serialport.on('open', error_cb(resolve, reject))
+    serialport.open()
+  })
+
+  console.log('Serialport connected')
+
+  await new Promise((resolve, reject) => {
+    mqttclient.on('error', reject)
     mqttclient.on('connect', () => {
       mqttclient.subscribe(config.topicToThing, error_cb(resolve, reject))
     })
-  )
+    mqttclient.reconnect()
+  })
 
-  const serial_opened = new Promise((resolve, reject) =>
-    serialport.on('open', error_cb(resolve, reject))
-  )
-
-  serialport.open()
-  mqttclient.reconnect()
-
-  await serial_opened
-  await mqtt_connected_and_subscribed
+  console.log('MQTT connected')
 
   mqttclient.on('message', (topic, buff) => {
     if (serialport.isOpen) {
@@ -85,17 +87,19 @@ const run = async () => {
   })
 
   await new Promise((resolve, reject) => {
-    serialport.on('error', reject)
     serialport.on('close', () => reject(new Error('Serialport closed')))
-    mqttclient.on('error', reject)
     mqttclient.on('close', () => reject(new Error('MQTTClient closed')))
     mqttclient.on('disconnect', () => reject(new Error('MQTTClient disconnected')))
     mqttclient.on('offline', () => reject(new Error('MQTTClient went offline')))
   })
-
 }
 
-const stop = () => new Promise(r => mqttclient.end(true, () => serialport.close(r)))
+const stop = async () => {
+  await new Promise(r => serialport.isOpen ? serialport.close(r) : r())
+  console.log('Stopped Serialport')
+  await mqttclient.end(true)
+  console.log('Stopped MQTT')
+}
 
 
 // Utils
@@ -119,12 +123,14 @@ const wait = ms => new Promise(r => setTimeout(r, ms))
 
 const rerun = () => {
   run().catch(error => {
-    console.error(error.message)
-    return stop()
-  }).then(() => {
-    console.log('Restarting...')
-    return wait(config.restartDelay).then(rerun)
+    console.log(error.message)
+    console.log('Stopping...')
+    stop()
+      .then(() => console.log('Waiting restart timeout...'))
+      .then(() => wait(config.restartDelay))
+      .then(() => console.log('Restarting...'))
+      .then(rerun)
   })
 }
 
-rerun('initial')
+rerun()
