@@ -25,6 +25,7 @@ const mqttclient = new AWSMqttClient({
   reconnectPeriod: 0,
   connectTimeout: config.restartDelay
 })
+mqttclient.end(true)
 
 const serialport = new SerialPort(
   config.serial.path, {
