@@ -54,7 +54,7 @@ const run = async () => {
     serialport.on('data', buff => {
       for (const message of mav2.parseBuffer(buff)) {
         if (message instanceof mavlink20.messages.bad_data) {
-          pong()
+          pong(serialport)
         }
         else {
           if (mqttclient.connected) {
@@ -94,7 +94,7 @@ const run = async () => {
 
 // Utils
 
-const pong = debounce(() => {
+const pong = debounce((serialport) => {
   console.log('pong')
   serialport.write(
     Uint8Array.from(
