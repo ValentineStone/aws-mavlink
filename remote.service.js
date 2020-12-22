@@ -33,14 +33,16 @@ const mav2 = new MAVLink20Processor()
 
 const run = async () => {
 
-  const serialport = new SerialPort(
-    config.serial.path, {
-    baudRate: config.serial.baudRate,
-    autoOpen: false
-  })
-  
+  let serialport
+
   try {
     console.log('Connecting...')
+
+    serialport = new SerialPort(
+      config.serial.path, {
+      baudRate: config.serial.baudRate,
+      autoOpen: false
+    })
 
     await new Promise((resolve, reject) => {
       serialport.on('error', reject)
