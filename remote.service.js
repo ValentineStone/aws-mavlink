@@ -30,7 +30,10 @@ const run = () => new Promise((resolve, reject) => {
 
   const serialport = new SerialPort(
     config.serial.path,
-    { baudRate: config.serial.baudRate },
+    {
+      baudRate: config.serial.baudRate,
+      //autoOpen: false
+    },
     exitOnError
   )
 
@@ -79,9 +82,8 @@ const run = () => new Promise((resolve, reject) => {
 
   function exitOnError(error) {
     if (error) {
-      mqttclient.end(true)
-      if (serialport.isOpen)
-        serialport.close()
+      mqttclient.end(true, () => { })
+      serialport.close(() => { })
       reject(error)
     }
   }
