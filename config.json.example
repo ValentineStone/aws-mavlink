@@ -7,5 +7,12 @@
     "path": "/dev/serial/by-id/SERIAL_DEVICE",
     "baudRate": 57600
   },
-  "pongThrottle": 1000
+  "pongThrottle": 1000,
+  "udp": {
+    "server": {},
+    "gcs": {
+      "port": 14550,
+      "address": "0.0.0.0"
+    }
+  }
 }
