@@ -88,7 +88,7 @@ const run = () => new Promise((resolve, reject) => {
         serialport.close(err => {
           console.error('SERIALPORT CLOSED', err)
           reject(error)
-        }
+        })
       })
     }
   }
