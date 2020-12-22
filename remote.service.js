@@ -1,49 +1,62 @@
 const AWS = require('aws-sdk')
-const AWSMqttmqttclient = require('aws-mqtt/lib/NodeClient')
+const AWSMqttClient = require('aws-mqtt/lib/NodeClient')
 const SerialPort = require('serialport')
 const path = require('path')
-const { throttle } = require('lodash')
+const { debounce } = require('lodash')
 const { MAVLink20Processor, mavlink20 } = require('./MAVLink20')
 
 // Load configs
 
 const config = require('./config.json')
+const { resolve } = require('path')
 
 AWS.config.loadFromPath(path.join(__dirname, 'aws.keys.json'))
 
-const run = () => new Promise((resolve, reject) => {
+const error_cb = (resolve, reject, value = undefined) =>
+  (error, value_arg) => error
+    ? reject(error)
+    : resolve(value_arg || value)
 
-  // Create resources
+// Create resources
 
-  const mqttclient = new AWSMqttmqttclient({
-    region: AWS.config.region,
-    credentials: AWS.config.credentials,
-    endpoint: config.endpoint,
-    reconnectPeriod: 0,
-    will: {
-      topic: '/will',
-      payload: 'Connection Closed abnormally..!',
-      qos: 0,
-      retain: false
-    }
-  })
+const mqttclient = new AWSMqttClient({
+  region: AWS.config.region,
+  credentials: AWS.config.credentials,
+  endpoint: config.endpoint,
+  reconnectPeriod: 0,
+  connectTimeout: config.restartDelay
+})
 
-  const serialport = new SerialPort(
-    config.serial.path,
-    {
-      baudRate: config.serial.baudRate,
-      //autoOpen: false
-    },
-    exitOnError
-  )
+const serialport = new SerialPort(
+  config.serial.path,
+  {
+    baudRate: config.serial.baudRate,
+    autoOpen: false
+  },
+  exitOnError
+)
 
-  const mav2 = new MAVLink20Processor()
+const mav2 = new MAVLink20Processor()
+
+const run = async () => {
 
   // Connect all together
 
-  mqttclient.on('connect', () => {
-    mqttclient.subscribe(config.topicToThing, exitOnError)
-  })
+  const mqtt_connected_and_subscribed = new Promise((resolve, reject) =>
+    mqttclient.on('connect', () => {
+      mqttclient.subscribe(config.topicToThing, error_cb(resolve, reject))
+    })
+  )
+
+  const serial_opened = new Promise((resolve, reject) =>
+    serialport.on('open', error_cb(resolve, reject))
+  )
+
+  serialport.open()
+  mqttclient.reconnect()
+
+  await serial_opened
+  await mqtt_connected_and_subscribed
 
   mqttclient.on('message', (topic, buff) => {
     if (serialport.isOpen) {
@@ -71,53 +84,47 @@ const run = () => new Promise((resolve, reject) => {
     }
   })
 
-  serialport.on('error', exitOnError)
-  serialport.on('close', () => exitOnError(new Error('Serialport closed')))
-  mqttclient.on('error', exitOnError)
-  mqttclient.on('close', () => exitOnError(new Error('MQTTClient closed')))
-  mqttclient.on('disconnect', () => exitOnError(new Error('MQTTClient disconnected')))
-  mqttclient.on('offline', () => exitOnError(new Error('MQTTClient went offline')))
+  await new Promise((resolve, reject) => {
+    serialport.on('error', reject)
+    serialport.on('close', () => reject(new Error('Serialport closed')))
+    mqttclient.on('error', reject)
+    mqttclient.on('close', () => reject(new Error('MQTTClient closed')))
+    mqttclient.on('disconnect', () => reject(new Error('MQTTClient disconnected')))
+    mqttclient.on('offline', () => reject(new Error('MQTTClient went offline')))
+  })
 
-  // Cleanup on exit
+}
 
-  function exitOnError(error) {
-    if (error) {
-      serialport.close(err => {
-        mqttclient.end(true)
-        console.error('SERIALPORT CLOSED', err)
-        console.error('MQTTCLIENT CLOSED')
-        reject(error)
-      })
-    }
-  }
+const stop = () => new Promise(r => mqttclient.end(true, () => serialport.close(r)))
 
-  // Utils
 
-  const pong = throttle(() => {
-    console.log('pong')
-    serialport.write(
-      Uint8Array.from(
-        mav2.send(
-          new mavlink20.messages.command_long(
-            config.sysid, 1, 0,
-            mav2.MAV_CMD_REQUEST_MESSAGE,
-            mav2.MAVLINK_MSG_ID_PROTOCOL_VERSION
-          )
+// Utils
+
+const pong = debounce(() => {
+  console.log('pong')
+  serialport.write(
+    Uint8Array.from(
+      mav2.send(
+        new mavlink20.messages.command_long(
+          config.sysid, 1, 0,
+          mav2.MAV_CMD_REQUEST_MESSAGE,
+          mav2.MAVLINK_MSG_ID_PROTOCOL_VERSION
         )
       )
     )
-  }, config.pongThrottle)
-
-})
+  )
+}, config.pongThrottle)
 
 const wait = ms => new Promise(r => setTimeout(r, ms))
 
 const rerun = () => {
   run().catch(error => {
     console.error(error.message)
+    return stop()
+  }).then(() => {
     console.log('Restarting...')
-    wait(config.restartDelay).then(rerun)
+    return wait(config.restartDelay).then(rerun)
   })
 }
 
-rerun()
+rerun('initial')

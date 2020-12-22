@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 const AWS = require('aws-sdk')
-const AWSMqttmqttclient = require('aws-mqtt/lib/NodeClient')
+const AWSMqttClient = require('aws-mqtt/lib/NodeClient')
 const dgram = require('dgram')
 const path = require('path')
 const { throttle } = require('lodash')
@@ -14,7 +14,7 @@ AWS.config.loadFromPath(path.join(__dirname, 'aws.keys.json'))
 
 // Create resources
 
-const mqttclient = new AWSMqttmqttclient({
+const mqttclient = new AWSMqttClient({
   region: AWS.config.region,
   credentials: AWS.config.credentials,
   endpoint: config.endpoint,
