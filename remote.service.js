@@ -22,10 +22,14 @@ const mqttclient = new AWSMqttClient({
   region: AWS.config.region,
   credentials: AWS.config.credentials,
   endpoint: config.endpoint,
-  reconnectPeriod: 0,
-  connectTimeout: config.restartDelay
+  reconnectPeriod: config.restartDelay,
+  connectTimeout: config.restartDelay,
 })
-mqttclient.end(true)
+
+mqttclient.on('connect', () => {
+  mqttclient.subscribe(config.topicToThing)
+  console.log('MQTT connected')
+})
 
 const serialport = new SerialPort(
   config.serial.path, {
@@ -36,72 +40,59 @@ const serialport = new SerialPort(
 const mav2 = new MAVLink20Processor()
 
 const run = async () => {
-  serialport.removeAllListeners()
-  mqttclient.removeAllListeners()
-  
-  console.log('Connecting...')
+  try {
+    serialport.removeAllListeners()
+    mqttclient.removeAllListeners('message')
 
-  // Connect all together
+    // Connect all together
 
-  await new Promise((resolve, reject) => {
-    serialport.on('error', reject)
-    serialport.on('open', error_cb(resolve, reject))
-    serialport.open()
-  })
+    console.log('Connecting...')
 
-  console.log('Serialport connected')
-
-  await new Promise((resolve, reject) => {
-    mqttclient.on('error', reject)
-    mqttclient.on('connect', () => {
-      mqttclient.subscribe(config.topicToThing, error_cb(resolve, reject))
+    await new Promise((resolve, reject) => {
+      serialport.on('error', reject)
+      serialport.on('open', error_cb(resolve, reject))
+      serialport.open()
     })
-    mqttclient.reconnect()
-  })
 
-  console.log('MQTT connected')
+    console.log('Serialport connected')
 
-  mqttclient.on('message', (topic, buff) => {
-    if (serialport.isOpen) {
-      console.log('recv', buff.length)
-      serialport.write(buff)
-    }
-    else
-      console.log('skip', 'recv', buff.length)
-  })
-
-  serialport.on('data', buff => {
-    for (const message of mav2.parseBuffer(buff)) {
-      if (message instanceof mavlink20.messages.bad_data) {
-        pong()
-      }
-      else {
-        if (mqttclient.connected) {
-          console.log('send', message.msgbuf.length, 'as', message.name)
-          mqttclient.publish(config.topicFromThing, message.msgbuf)
+    serialport.on('data', buff => {
+      for (const message of mav2.parseBuffer(buff)) {
+        if (message instanceof mavlink20.messages.bad_data) {
+          pong()
         }
         else {
-          console.log('skip', 'send', message.msgbuf.length, 'as', message.name)
+          if (mqttclient.connected) {
+            console.log('send', message.msgbuf.length, 'as', message.name)
+            mqttclient.publish(config.topicFromThing, message.msgbuf)
+          }
+          else {
+            console.log('skip', 'send', message.msgbuf.length, 'as', message.name)
+          }
         }
       }
-    }
-  })
+    })
 
-  await new Promise((resolve, reject) => {
-    serialport.on('error', reject)
-    mqttclient.on('error', reject)
-    serialport.on('close', () => reject(new Error('Serialport closed')))
-    mqttclient.on('close', () => reject(new Error('MQTTClient closed')))
-    mqttclient.on('disconnect', () => reject(new Error('MQTTClient disconnected')))
-    mqttclient.on('offline', () => reject(new Error('MQTTClient went offline')))
-  })
-}
+    mqttclient.on('message', (topic, buff) => {
+      if (serialport.isOpen) {
+        console.log('recv', buff.length)
+        serialport.write(buff)
+      }
+      else
+        console.log('skip', 'recv', buff.length)
+    })
 
-const stop = async () => {
-  await new Promise(r => serialport.isOpen ? serialport.close(r) : r())
-  console.log('Stopped Serialport')
-  await mqttclient.end(true)
-  console.log('Stopped MQTT')
+    await new Promise((resolve, reject) => {
+      serialport.on('error', reject)
+      serialport.on('close', () => reject(new Error('Serialport closed')))
+    })
+  }
+  catch (error) {
+    console.log('Stopping...')
+    await new Promise(r => serialport.close(r))
+    console.log('Stopped Serialport')
+    return error
+  }
 }
 
 
@@ -125,12 +116,10 @@ const pong = debounce(() => {
 const wait = ms => new Promise(r => setTimeout(r, ms))
 
 const rerun = () => {
-  run().catch(error => {
+  run().then(error => {
     console.log(error.message)
-    console.log('Stopping...')
-    stop()
-      .then(() => console.log('Waiting restart timeout...'))
-      .then(() => wait(config.restartDelay))
+    console.log('Waiting restart timeout...')
+    wait(config.restartDelay)
       .then(() => console.log('Restarting...'))
       .then(rerun)
   })
