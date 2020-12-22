@@ -20,11 +20,11 @@ const mqttclient = new AWSMqttClient({
   reconnectPeriod: config.restartDelay,
   connectTimeout: config.restartDelay,
 })
-
 mqttclient.on('connect', () => {
   mqttclient.subscribe(config.topicToThing)
   console.log('MQTT connected')
 })
+mqttclient.on('error', () => mqttclient.reconnect())
 
 const mav2 = new MAVLink20Processor()
 
