@@ -11,11 +11,6 @@ const config = require('./config.json')
 
 AWS.config.loadFromPath(path.join(__dirname, 'aws.keys.json'))
 
-const error_cb = (resolve, reject, value = undefined) =>
-  (error, value_arg) => error
-    ? reject(error)
-    : resolve(value_arg || value)
-
 // Create resources
 
 const mqttclient = new AWSMqttClient({
@@ -31,26 +26,25 @@ mqttclient.on('connect', () => {
   console.log('MQTT connected')
 })
 
-const serialport = new SerialPort(
-  config.serial.path, {
-  baudRate: config.serial.baudRate,
-  autoOpen: false
-})
-
 const mav2 = new MAVLink20Processor()
 
+
+// Connect all together
+
 const run = async () => {
+
+  const serialport = new SerialPort(
+    config.serial.path, {
+    baudRate: config.serial.baudRate,
+    autoOpen: false
+  })
+  
   try {
-    serialport.removeAllListeners()
-    mqttclient.removeAllListeners('message')
-
-    // Connect all together
-
     console.log('Connecting...')
 
     await new Promise((resolve, reject) => {
       serialport.on('error', reject)
-      serialport.on('open', error_cb(resolve, reject))
+      serialport.on('open', error => error ? reject(error) : resolve())
       serialport.open()
     })
 
@@ -73,6 +67,7 @@ const run = async () => {
       }
     })
 
+    mqttclient.removeAllListeners('message')
     mqttclient.on('message', (topic, buff) => {
       if (serialport.isOpen) {
         console.log('recv', buff.length)
