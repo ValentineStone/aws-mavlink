@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 const AWS = require('aws-sdk')
 const AWSMqttmqttclient = require('aws-mqtt/lib/NodeClient')
 const SerialPort = require('serialport')
