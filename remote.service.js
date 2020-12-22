@@ -85,14 +85,8 @@ const run = () => new Promise((resolve, reject) => {
 
       mqttclient.end(true, () => {
         console.error('MQTTCLIENT CLOSED')
-        if (serialport.isOpen) {
-          serialport.close(err => {
-            console.error('SERIALPORT CLOSED', err)
-            reject(error)
-          })
-        }
-        else {
-          console.error('SERIALPORT NOT OPEN')
+        serialport.close(err => {
+          console.error('SERIALPORT CLOSED', err)
           reject(error)
         }
       })
