@@ -87,6 +87,8 @@ const run = async () => {
   })
 
   await new Promise((resolve, reject) => {
+    serialport.on('error', reject)
+    mqttclient.on('error', reject)
     serialport.on('close', () => reject(new Error('Serialport closed')))
     mqttclient.on('close', () => reject(new Error('MQTTClient closed')))
     mqttclient.on('disconnect', () => reject(new Error('MQTTClient disconnected')))
