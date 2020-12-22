@@ -89,3 +89,18 @@ function exitOnError(error) {
     process.exit(1)
   }
 }
+
+const pong = throttle(() => {
+  console.log('pong')
+  serialport.write(
+    Uint8Array.from(
+      mav2.send(
+        new mavlink20.messages.command_long(
+          config.sysid, 1, 0,
+          mav2.MAV_CMD_REQUEST_MESSAGE,
+          mav2.MAVLINK_MSG_ID_PROTOCOL_VERSION
+        )
+      )
+    )
+  )
+}, config.pongThrottle)
