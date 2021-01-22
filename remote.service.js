@@ -18,6 +18,7 @@ const mqttclient = new AWSMqttClient({
   credentials: AWS.config.credentials,
   endpoint: config.endpoint,
   reconnectPeriod: 1000,
+  queueQoSZero: false,
 })
 mqttclient.on('connect', () => {
   mqttclient.subscribe(config.topicToThing)
